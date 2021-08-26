@@ -13,6 +13,7 @@ import (
 
 	"github.com/influxdata/flux"
 	"github.com/influxdata/flux/ast"
+	"github.com/influxdata/flux/ast/astutil"
 	"github.com/influxdata/flux/ast/edit"
 	"github.com/influxdata/flux/codes"
 	"github.com/influxdata/flux/csv"
@@ -89,9 +90,16 @@ func doRefactor(fname string) error {
 		return err
 	}
 
-	fromFile := ast.Format(pkg)
+	fromFile, err := astutil.Format(pkg.Files[0])
+	if err != nil {
+		return err
+	}
 	for {
-		fmt.Printf("Content of the script:\n\n%s\n\n", ast.Format(pkg))
+		fmtdAst, err := astutil.Format(pkg.Files[0])
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Content of the script:\n\n%s\n\n", fmtdAst)
 		fmt.Println("Running...")
 		rawResult, rawDiff, err := executeScript(pkg)
 		if err != nil {
@@ -105,7 +113,10 @@ func doRefactor(fname string) error {
 					return err
 				} else {
 					pkg = p
-					fromFile = ast.Format(pkg)
+					fromFile, err = astutil.Format(pkg.Files[0])
+					if err != nil {
+						return err
+					}
 				}
 				continue
 			}
@@ -137,12 +148,20 @@ func doRefactor(fname string) error {
 				return err
 			} else {
 				pkg = p
-				fromFile = ast.Format(pkg)
+				fromFile, err = astutil.Format(pkg.Files[0])
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
 
-	if fromFile != ast.Format(pkg) {
+	fmtdAst, err := astutil.Format(pkg.Files[0])
+	if err != nil {
+		return err
+	}
+
+	if fromFile != fmtdAst {
 		return updateScript(fname, pkg)
 	}
 	return nil
@@ -173,14 +192,19 @@ func executeScript(pkg *ast.Package) (string, string, error) {
 		return "", "", errors.Wrap(err, codes.Inherit, "error during test generation")
 	}
 
+	fmtdAst, err := astutil.Format(testPkg.Files[0])
+	if err != nil {
+		return "", "", errors.Wrap(err, codes.Inherit, "error during formatting file")
+	}
+
 	c := lang.FluxCompiler{
-		Query: ast.Format(testPkg),
+		Query: fmtdAst,
 	}
 
 	ctx := flux.NewDefaultDependencies().Inject(context.Background())
 	program, err := c.Compile(ctx, runtime.Default)
 	if err != nil {
-		fmt.Println(ast.Format(testPkg))
+		fmt.Println(fmtdAst)
 		return "", "", errors.Wrap(err, codes.Inherit, "error during compilation, check your script and retry")
 	}
 
@@ -313,7 +337,11 @@ func updateOutData(node *ast.Package, rawResult string) error {
 }
 
 func updateScript(fname string, script *ast.Package) error {
-	fmt.Printf("Content of the new script:\n\n%s\n\n", ast.Format(script))
+	fmtdAst, err := astutil.Format(script.Files[0])
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Content of the new script:\n\n%s\n\n", fmtdAst)
 	y, err := yesOrNo("Do you want to update the script (y/n)?", true)
 	if err != nil {
 		return err
@@ -322,7 +350,7 @@ func updateScript(fname string, script *ast.Package) error {
 		fmt.Println("Script NOT updated")
 		return nil
 	}
-	err = ioutil.WriteFile(fname, []byte(ast.Format(script)), 0644)
+	err = ioutil.WriteFile(fname, []byte(fmtdAst), 0644)
 	if err != nil {
 		return err
 	}
