@@ -1,13 +1,15 @@
 FROM flux-build:latest AS builder
 
-COPY . /home/builder/src
+COPY --chown=builder:builder . /home/builder/src
+
+WORKDIR /home/builder/src
 
 RUN go get github.com/influxdata/pkg-config
 
-#RUN go build ./cmd/flux
+RUN go build ./cmd/flux
 
-FROM scratch
+FROM golang:1.16
 
-COPY --from=builder /home/builder/flux /flux
+COPY --from=builder /home/builder/src/flux /go/flux
 
-CMD ./flux repl
+CMD ["/go/flux", "repl"]
