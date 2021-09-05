@@ -1,0 +1,13 @@
+FROM flux-build:latest AS builder
+
+COPY . /home/builder/src
+
+RUN go get github.com/influxdata/pkg-config
+
+#RUN go build ./cmd/flux
+
+FROM scratch
+
+COPY --from=builder /home/builder/flux /flux
+
+CMD ./flux repl
